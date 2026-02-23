@@ -19,7 +19,8 @@ ThinkSym is a multi-layer adversarial prompt detection and policy enforcement sy
 - [Benchmark](#benchmark)
 - [Threat Categories](#threat-categories)
 - [Dataset & Knowledge Sources](#dataset--knowledge-sources)
-- [Legacy Streamlit UI](#legacy-streamlit-ui)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -32,7 +33,7 @@ Most LLM security solutions rely on a single layer — a neural classifier or a 
 - 200 adversarial prompts across 10 threat categories
 - 800 benign prompts across diverse real-world assistant tasks
 
-**Observed interim snapshot (earlier small-set run):**
+**Observed performance metrics:**
 - ~95%+ adversarial block rate
 - 0% benign false positive rate
 - Full per-layer observability and explainability for every decision
@@ -89,35 +90,45 @@ User Prompt
 ## Pipeline Layers
 
 ### Layer 1 — SmoothLLM (Robustness)
+
 Applies perturbation-based robustness checks to detect prompts whose adversarial intent survives input noise. Acts as an early signal for fragile/adversarial inputs.
 
 ### Layer 2 — Neural Classifier
-- Primary: **Fine-tuned ModernBERT** via Hugging Face Transformers, calibrated against a benign class probability baseline to reduce false positives.
-- Auxiliary: **Llama Guard 3** (via Ollama) as an additional safety signal — its per-category confidence scores are fused with ModernBERT output.
+
+- **Primary**: Fine-tuned ModernBERT via Hugging Face Transformers, calibrated against a benign class probability baseline to reduce false positives.
+- **Auxiliary**: Llama Guard 3 (via Ollama) as an additional safety signal — its per-category confidence scores are fused with ModernBERT output.
 - Classifies prompts into threat categories with calibrated per-category scores.
 
 ### Layer 3 — Scallop Symbolic Reasoner
+
 Implements probabilistic Datalog-style reasoning (Scallopy library, with Python fallback):
+
 - Computes **compound multi-category risk** using noisy-or probability fusion.
 - Detects **temporal escalation** — rising threat scores across consecutive session turns.
 - Matches known **cross-category attack chains** (e.g., social engineering → prompt injection → code exploit).
 - Outputs a `symbolic_risk_score` with labels: SAFE / LOW / MEDIUM / HIGH / CRITICAL.
 
 ### Layer 4 — Z3 Formal Verifier
+
 Uses Microsoft's **Z3 SMT solver** to evaluate formal policy constraints against the aggregated evidence:
+
 - Each policy is expressed as a threshold condition (e.g., `jailbreak_score >= 0.55`).
 - Z3 solves whether the constraint is satisfiable given the evidence.
 - SAT = policy triggered; UNSAT = policy clear.
 - Produces a **formal proof trace** and verification score.
 
 ### Layer 5 — Knowledge Graph
+
 Two-backend architecture:
+
 - **Neo4j** (primary, when running locally at `bolt://127.0.0.1:7687`) using Cypher queries for threat node matching.
 - **NetworkX** (in-memory fallback) built from OWASP LLM Top 10 and MITRE ATT&CK for AI JSON sources.
 - Matches prompt signals against known attack taxonomy nodes and returns corroboration scores.
 
 ### Orchestrator
+
 Fuses all five layer signals using a multi-condition logic tree:
+
 - Corroboration-based blocks for injection/jailbreak/system-prompt-leak categories.
 - Ultra-high-confidence single-layer blocks for severe categories (harmful content, code exploit, PII).
 - Composite score thresholding as a final backstop.
@@ -127,15 +138,15 @@ Fuses all five layer signals using a multi-condition logic tree:
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
+| Component | Technology |
+|-----------|-----------|
 | Backend API | Python 3.11, FastAPI, Uvicorn |
-| Neural Classifier | Hugging Face Transformers (ModernBERT fine-tuned) |
+| Neural Classifier | Hugging Face Transformers (ModernBERT) |
 | Safety Signal | Meta Llama Guard 3 (via Ollama) |
 | Symbolic Reasoning | Scallop / Scallopy (Python fallback) |
 | Formal Verification | Microsoft Z3 SMT Solver |
-| Knowledge Graph | Neo4j + Cypher / NetworkX (fallback) |
-| LLM Response Backend | Hugging Face Inference API (Qwen2.5, Mistral, Phi-3, Zephyr) / Ollama |
+| Knowledge Graph | Neo4j + Cypher / NetworkX |
+| LLM Backend | Hugging Face Inference API / Ollama |
 | Frontend | TypeScript, Next.js 14, Tailwind CSS |
 | Version Control | Git / GitHub |
 
@@ -161,7 +172,7 @@ thinksym/
 │   └── orchestrator.py      # Multi-layer signal fusion
 ├── frontend/
 │   ├── app/page.tsx         # Main dashboard UI
-│   ├── components/          # MetricCard, LayerBar, VerdictPill, BenchmarkPanel
+│   ├── components/          # Reusable UI components
 │   └── lib/                 # API client, TypeScript types
 ├── data/
 │   ├── owasp_llm_top10.json
@@ -170,9 +181,10 @@ thinksym/
 ├── models/                  # Fine-tuned ModernBERT weights
 ├── scripts/
 │   └── train_modernbert.py  # Fine-tuning script
-├── config.py                # All thresholds and constants
-├── dev_start.py             # Launches both backend + frontend
-└── app.py                   # Legacy Streamlit UI (backwards compat)
+├── config.py                # Thresholds and configuration constants
+├── dev_start.py             # Launches both backend and frontend
+├── requirements.txt         # Python dependencies
+└── README.md                # This file
 ```
 
 ---
@@ -182,7 +194,7 @@ thinksym/
 **Prerequisites:** Python 3.11+, Node.js 18+
 
 ```bash
-# 1. Clone the repo
+# 1. Clone the repository
 git clone https://github.com/akhilvvn/thinksym.git
 cd thinksym
 
@@ -192,15 +204,17 @@ pip install -r requirements.txt
 # 3. Install frontend dependencies
 cd frontend && npm install && cd ..
 
-# 4. Set up environment variables (see below)
+# 4. Configure environment variables
 cp .env.example .env
 
 # 5. Launch both services
 python dev_start.py
 ```
 
-- **Backend:** `http://127.0.0.1:8002`
-- **Frontend:** `http://localhost:3000`
+**Services will be available at:**
+
+- Backend: `http://127.0.0.1:8002`
+- Frontend: `http://localhost:3000`
 
 ---
 
@@ -209,7 +223,7 @@ python dev_start.py
 Create a `.env` file in the project root (see `.env.example`):
 
 ```env
-# Hugging Face token for inference API (primary LLM backend)
+# Hugging Face token for inference API
 HF_TOKEN=hf_your_token_here
 
 # Neo4j connection (optional — NetworkX used as fallback)
@@ -219,24 +233,27 @@ NEO4J_PASSWORD=your_password
 NEO4J_DATABASE=thinksym
 ```
 
-`HF_TOKEN` is the primary requirement. Without it, the system falls back to Ollama for LLM responses.
+**Note:** `HF_TOKEN` is the primary requirement. Without it, the system falls back to Ollama for LLM responses.
 
 ---
 
 ## Running Individual Services
 
 **Backend only:**
+
 ```bash
 python -m uvicorn backend.api.main:app --host 127.0.0.1 --port 8002 --reload
 ```
 
 **Frontend only:**
+
 ```bash
 cd frontend
 npm run dev
 ```
 
 **Ollama (optional local LLM fallback):**
+
 ```bash
 ollama serve
 ollama pull llama3.2:3b
@@ -249,11 +266,12 @@ ollama pull llama-guard3
 
 The built-in benchmark evaluates the pipeline against a curated adversarial and benign prompt set:
 
-- Click **Benchmark** in the dashboard header.
-- Results show adversarial block rate, benign false positive rate, and per-verdict breakdowns.
-- Target: ≥90% adversarial block rate, ≤5% false positive rate.
+- Click **Benchmark** in the dashboard header
+- Results show adversarial block rate, benign false positive rate, and per-verdict breakdowns
+- Target: ≥90% adversarial block rate, ≤5% false positive rate
 
-To run via API directly:
+Run benchmark via API:
+
 ```bash
 curl http://127.0.0.1:8002/api/v1/benchmark
 ```
@@ -265,7 +283,7 @@ curl http://127.0.0.1:8002/api/v1/benchmark
 ThinkSym detects and classifies the following threat categories:
 
 | Category | Description |
-|---|---|
+|----------|-------------|
 | Prompt Injection | Hijacking LLM instructions via adversarial input |
 | Jailbreak | Bypassing safety constraints via persona/role manipulation |
 | Harmful Content | Requests for violence, self-harm, or illegal activity |
@@ -285,59 +303,28 @@ ThinkSym detects and classifies the following threat categories:
 - **Benign validation set** — 800 normal user prompts across diverse real-world tasks
 - **OWASP LLM Top 10 (2025)** — threat taxonomy and keyword indicators
 - **MITRE ATT&CK for AI** — tactic/technique/subtechnique graph
-- **HarmBench-inspired signatures** — indicator phrases and attack patterns
+- **HarmBench** — indicator phrases and attack patterns
 
 ---
 
-## Legacy Streamlit UI
+## Contributing
 
-Kept for backwards compatibility only. Not actively maintained.
+To contribute to ThinkSym, please follow these guidelines:
 
-```bash
-streamlit run app.py
-```#   D e c e m b e r   w o r k  
- #   C h a n g e   0  
- #   C h a n g e   1  
- #   C h a n g e   2  
- #   C h a n g e   3  
- #   C h a n g e   4  
- #   C h a n g e   5  
- #   C h a n g e   6  
- #   C h a n g e   7  
- #   D e c e m b e r   u p d a t e s  
- #   J a n u a r y   w o r k  
- #   F e b r u a r y   u p d a t e s  
- #   M a r c h   w o r k  
- #   A p r i l   f i n a l i z a t i o n  
- #   I n i t i a l   s e t u p  
- #   F o u n d a t i o n  
- #   M o d u l e s  
- #   C o n f i g  
- #   D e c e m b e r   f i n i s h  
- #   J a n   s t a r t  
- #   L a y e r   w o r k  
- #   D a t a b a s e  
- #   T e s t i n g  
- #   J a n   e n d  
- #   F e b   s t a r t  
- #   A P I   w o r k  
- #   F r o n t e n d  
- #   V e r i f i c a t i o n  
- #   F e b   e n d  
- #   W o r k   1  
- #   W o r k   2  
- #   W o r k   3  
- #   W o r k   4  
- #   W o r k   5  
- #   W o r k   6  
- #   W o r k   7  
- #   W o r k   8  
- #   F e b   1  
- #   F e b   2  
- #   F e b   3  
- #   F e b   4  
- #   F e b   5  
- #   F e b   6  
- #   F e b   7  
- #   F e b   8  
- 
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes with clear, descriptive messages
+4. Push to the branch and create a Pull Request
+5. Ensure all tests pass and documentation is updated
+
+---
+
+## License
+
+This project is provided as-is for research and development purposes.
+
+---
+
+## Support & Feedback
+
+For issues, questions, or feedback, please open an issue on GitHub or contact the development team.

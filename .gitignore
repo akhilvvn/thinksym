@@ -30,3 +30,5 @@ Thumbs.db
 .streamlit/secrets.toml
 .env
 .env.*
+
+.vscode/

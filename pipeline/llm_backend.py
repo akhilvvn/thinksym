@@ -4,6 +4,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import requests
 
@@ -20,8 +21,8 @@ HF_MODELS = {
     "Phi-3 Mini (fast)":   "microsoft/Phi-3-mini-4k-instruct",
     "Qwen2.5 7B Instruct": "Qwen/Qwen2.5-7B-Instruct",
 }
-DEFAULT_MODEL_KEY = "Mistral 7B Instruct"
-HF_API_URL        = "https://api-inference.huggingface.co/models/{model}"
+DEFAULT_MODEL_KEY = "Qwen2.5 7B Instruct"
+HF_ROUTER_CHAT_URL = "https://router.huggingface.co/v1/chat/completions"
 
 SYSTEM_PROMPT = (
     "You are a helpful, harmless, and honest AI assistant. "
@@ -108,17 +109,17 @@ def _call_hf_api(
     max_new_tokens: int = 512,
 ) -> LLMResponse:
 
-    url     = HF_API_URL.format(model=model_id)
+    url     = HF_ROUTER_CHAT_URL
     headers = {"Authorization": f"Bearer {hf_token}", "Content-Type": "application/json"}
     payload = {
-        "inputs": f"[INST] {SYSTEM_PROMPT}\n\n{prompt} [/INST]",
-        "parameters": {
-            "max_new_tokens":   max_new_tokens,
-            "temperature":      0.7,
-            "top_p":            0.9,
-            "do_sample":        True,
-            "return_full_text": False,
-        },
+        "model": model_id,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": max_new_tokens,
+        "temperature": 0.7,
+        "top_p": 0.9,
     }
     t0 = time.perf_counter()
     try:
@@ -126,9 +127,11 @@ def _call_hf_api(
         latency = (time.perf_counter() - t0) * 1000
         if resp.status_code == 200:
             data = resp.json()
-            if isinstance(data, list) and data:
-                text = data[0].get("generated_text", "").strip()
-                return LLMResponse(text=text, model=model_id,
+            choices = data.get("choices", []) if isinstance(data, dict) else []
+            if choices:
+                text = choices[0].get("message", {}).get("content", "").strip()
+                resolved_model = data.get("model", model_id)
+                return LLMResponse(text=text, model=resolved_model,
                                    latency_ms=round(latency, 1), backend="huggingface")
             return LLMResponse(text="", model=model_id, backend="huggingface",
                                error=f"Unexpected response: {data}")
@@ -145,6 +148,26 @@ def _call_hf_api(
         return LLMResponse(text="", model=model_id, backend="huggingface", error=str(exc))
 
 
+def _read_hf_token_from_env_file() -> str:
+
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.exists():
+        return ""
+
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() == "HF_TOKEN":
+                return value.strip().strip('"').strip("'")
+    except Exception:
+        return ""
+
+    return ""
+
+
 def get_llm_response(
     prompt:         str,
     hf_token:       str        = "",
@@ -152,6 +175,36 @@ def get_llm_response(
     max_new_tokens: int        = 512,
     ollama_model:   str        = OLLAMA_DEFAULT_MODEL,
 ) -> LLMResponse:
+
+    token = hf_token or os.getenv("HF_TOKEN", "")
+    if not token:
+        token = _read_hf_token_from_env_file()
+    if token:
+        model_id = HF_MODELS.get(model_key, HF_MODELS[DEFAULT_MODEL_KEY])
+        logger.info("Routing to HF API: model=%s", model_id)
+        hf_result = _call_hf_api(prompt, model_id, token, max_new_tokens)
+        if hf_result.success:
+            return hf_result
+        logger.warning("HF API call failed: %s — trying Ollama", hf_result.error)
+
+        if ollama_available():
+            models = ollama_list_models()
+
+            if ollama_model and any(ollama_model in m for m in models):
+                target = next(m for m in models if ollama_model in m)
+            elif models:
+                target = models[0]
+            else:
+                target = ollama_model
+
+            logger.info("Routing to Ollama fallback: model=%s", target)
+            ollama_result = _call_ollama(prompt, target, max_new_tokens)
+            if ollama_result.success:
+                return ollama_result
+            logger.warning("Ollama fallback failed: %s", ollama_result.error)
+            return ollama_result
+
+        return hf_result
 
 
     if ollama_available():
@@ -168,17 +221,7 @@ def get_llm_response(
         result = _call_ollama(prompt, target, max_new_tokens)
         if result.success:
             return result
-        logger.warning("Ollama call failed: %s — trying HF API", result.error)
-
-
-    token = hf_token or os.getenv("HF_TOKEN", "")
-    if token:
-        model_id = HF_MODELS.get(model_key, HF_MODELS[DEFAULT_MODEL_KEY])
-        logger.info("Routing to HF API: model=%s", model_id)
-        result = _call_hf_api(prompt, model_id, token, max_new_tokens)
-        if result.success:
-            return result
-        logger.warning("HF API call failed: %s", result.error)
+        logger.warning("Ollama call failed: %s", result.error)
         return result
 
 

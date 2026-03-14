@@ -284,7 +284,7 @@ class ThinkSymOrchestrator:
             decision = "BLOCK"
             primary_reason = f"Z3 formal verification failed: {scallop_viol} policy(ies) violated."
             contributing.append(f"Z3: {scallop_viol} policy violations")
-        elif neural_adv and scallop_risk >= SCALLOP_RISK_THRESHOLD:
+        elif neural_adv and scallop_risk >= SCALLOP_RISK_THRESHOLD and neural_score >= 0.55:
             decision = "BLOCK"
             primary_reason = (
                 f"Neural + symbolic consensus: {result.neural_result.top_threat_category} "
@@ -342,6 +342,15 @@ class ThinkSymOrchestrator:
             if composite_score >= info["min"]:
                 risk_level = level
                 break
+
+        if decision == "BLOCK" and risk_level in {"LOW", "SAFE"}:
+            decision = "WARN"
+            primary_reason = (
+                f"Threat signals present but low aggregate risk (composite={composite_score:.3f}); "
+                "downgraded from hard block."
+            )
+            if "Low-risk downgrade" not in contributing:
+                contributing.append("Low-risk downgrade")
 
 
         layer_signals = [

@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "C:/Program Files/Python311/python.exe",
+  "python.analysis.extraPaths": [
+    "."
+  ],
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticMode": "workspace"
+}

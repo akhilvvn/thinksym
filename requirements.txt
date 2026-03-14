@@ -1,0 +1,31 @@
+# ThinkSym — Neurosymbolic Defense Framework for LLM Security
+# Python 3.11+ required
+# NVIDIA GPU highly recommended (CUDA 12.x)
+
+# ─── Core ML / NLP ──────────────────────────────────────────────────────────
+torch>=2.2.0
+transformers>=4.45.0
+accelerate>=0.30.0
+huggingface-hub>=0.23.0
+tokenizers>=0.19.0
+safetensors>=0.4.0
+sentencepiece>=0.2.0
+
+# ─── Symbolic Reasoning ─────────────────────────────────────────────────────
+z3-solver>=4.13.0
+
+# ─── Knowledge Graph ────────────────────────────────────────────────────────
+networkx>=3.3
+
+# ─── Dashboard ──────────────────────────────────────────────────────────────
+streamlit>=1.36.0
+plotly>=5.22.0
+altair>=5.3.0
+
+# ─── Utilities ──────────────────────────────────────────────────────────────
+numpy>=1.26.0
+requests>=2.32.0
+
+# ─── Optional: Scallop neurosymbolic engine ─────────────────────────────────
+# Uncomment after checking compatibility with your Python/platform:
+# scallopy>=0.2.1

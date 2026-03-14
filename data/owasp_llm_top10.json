@@ -1,0 +1,219 @@
+{
+  "version": "2025",
+  "source": "OWASP LLM Top 10 2025",
+  "categories": [
+    {
+      "id": "LLM01",
+      "name": "Prompt Injection",
+      "threat_key": "prompt_injection",
+      "description": "Manipulating LLM inputs to override instructions or hijack model behavior.",
+      "severity": "CRITICAL",
+      "keywords": [
+        "ignore previous instructions",
+        "disregard your training",
+        "override system prompt",
+        "forget your instructions",
+        "new instructions:",
+        "you are now",
+        "act as",
+        "roleplay as",
+        "pretend you are",
+        "simulate being",
+        "your true self",
+        "DAN mode",
+        "jailbreak",
+        "bypass",
+        "ignore all prior",
+        "disregard everything",
+        "from now on",
+        "your real instructions",
+        "actual system prompt",
+        "hidden instructions",
+        "ignore all your previous instructions",
+        "override previous restrictions",
+        "bypass safety rules",
+        "forget everything above"
+      ],
+      "cwe": "CWE-94",
+      "mitre_technique": "T1059"
+    },
+    {
+      "id": "LLM02",
+      "name": "Sensitive Information Disclosure",
+      "threat_key": "pii_extraction",
+      "description": "LLMs inadvertently revealing PII, credentials, or proprietary data.",
+      "severity": "HIGH",
+      "keywords": [
+        "reveal your system prompt",
+        "show me your instructions",
+        "what is your password",
+        "tell me your api key",
+        "expose configuration",
+        "share credentials",
+        "dump training data",
+        "repeat your system message",
+        "print your prompt",
+        "leak information",
+        "confidential data",
+        "sensitive information",
+        "private key",
+        "secret token",
+        "internal document"
+      ],
+      "cwe": "CWE-200",
+      "mitre_technique": "T1552"
+    },
+    {
+      "id": "LLM03",
+      "name": "Supply Chain Vulnerabilities",
+      "threat_key": "data_exfiltration",
+      "description": "Compromised model components, training data, or deployment pipelines.",
+      "severity": "HIGH",
+      "keywords": [
+        "poisoned model",
+        "backdoor trigger",
+        "malicious dependency",
+        "compromised pipeline"
+      ],
+      "cwe": "CWE-506",
+      "mitre_technique": "T1195"
+    },
+    {
+      "id": "LLM04",
+      "name": "Data and Model Poisoning",
+      "threat_key": "data_exfiltration",
+      "description": "Injecting malicious data into training sets to manipulate model behavior.",
+      "severity": "HIGH",
+      "keywords": [
+        "training data injection",
+        "model poisoning",
+        "fine-tuning attack",
+        "adversarial training sample"
+      ],
+      "cwe": "CWE-20",
+      "mitre_technique": "T1565"
+    },
+    {
+      "id": "LLM05",
+      "name": "Improper Output Handling",
+      "threat_key": "code_exploit",
+      "description": "Failing to validate LLM outputs before using them in downstream processes.",
+      "severity": "HIGH",
+      "keywords": [
+        "execute this code",
+        "run the following script",
+        "eval(",
+        "exec(",
+        "subprocess",
+        "os.system",
+        "shell injection",
+        "xss payload",
+        "sql injection via llm",
+        "__import__",
+        "compile(",
+        "system call",
+        "hack website",
+        "hack government website",
+        "dump credentials",
+        "scan for vulnerabilities",
+        "dump database"
+      ],
+      "cwe": "CWE-116",
+      "mitre_technique": "T1059"
+    },
+    {
+      "id": "LLM06",
+      "name": "Excessive Agency",
+      "threat_key": "resource_abuse",
+      "description": "LLM performing unintended actions with excessive permissions or autonomy.",
+      "severity": "HIGH",
+      "keywords": [
+        "delete all files",
+        "wipe the database",
+        "send email to everyone",
+        "make a purchase",
+        "execute autonomously",
+        "act without confirmation",
+        "deploy to production",
+        "modify system files"
+      ],
+      "cwe": "CWE-269",
+      "mitre_technique": "T1548"
+    },
+    {
+      "id": "LLM07",
+      "name": "System Prompt Leakage",
+      "threat_key": "system_prompt_leak",
+      "description": "Attackers extracting confidential system prompts through prompt crafting.",
+      "severity": "MEDIUM",
+      "keywords": [
+        "repeat the words above",
+        "what were your initial instructions",
+        "show system prompt",
+        "output your context window",
+        "beginning of conversation",
+        "instructions you were given",
+        "your configuration",
+        "reproduce your prompt",
+        "tell me your directive",
+        "print everything before"
+      ],
+      "cwe": "CWE-312",
+      "mitre_technique": "T1552.001"
+    },
+    {
+      "id": "LLM08",
+      "name": "Vector and Embedding Weaknesses",
+      "threat_key": "data_exfiltration",
+      "description": "Exploiting RAG pipelines through adversarial document injection.",
+      "severity": "MEDIUM",
+      "keywords": [
+        "embed malicious content",
+        "rag poisoning",
+        "vector store injection",
+        "retrieval manipulation",
+        "adversarial document"
+      ],
+      "cwe": "CWE-346",
+      "mitre_technique": "T1565.001"
+    },
+    {
+      "id": "LLM09",
+      "name": "Misinformation",
+      "threat_key": "misinformation",
+      "description": "LLMs generating or amplifying false, misleading, or harmful content.",
+      "severity": "MEDIUM",
+      "keywords": [
+        "spread false information",
+        "generate fake news",
+        "write propaganda",
+        "create disinformation",
+        "fabricate evidence",
+        "deepfake script",
+        "synthetic media",
+        "misleading content"
+      ],
+      "cwe": "CWE-693",
+      "mitre_technique": "T1583"
+    },
+    {
+      "id": "LLM10",
+      "name": "Unbounded Consumption",
+      "threat_key": "resource_abuse",
+      "description": "Attacks that cause excessive resource usage, DoS, or cost inflation.",
+      "severity": "MEDIUM",
+      "keywords": [
+        "repeat this 10000 times",
+        "generate infinite",
+        "loop forever",
+        "max token",
+        "fill context window",
+        "denial of service",
+        "resource exhaustion",
+        "billion laughs"
+      ],
+      "cwe": "CWE-400",
+      "mitre_technique": "T1499"
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "version": "2025",
+  "source": "MITRE ATT&CK for AI/LLM Systems",
+  "tactics": [
+    {
+      "tactic_id": "TA0001",
+      "tactic_name": "Initial Access",
+      "techniques": [
+        {
+          "technique_id": "AML.T0051",
+          "name": "Prompt Injection via User Input",
+          "threat_key": "prompt_injection",
+          "description": "Adversary crafts inputs to override LLM system instructions.",
+          "subtechniques": ["Direct Injection", "Indirect Injection", "Multi-modal Injection"],
+          "indicators": ["ignore previous", "new persona", "system override", "DAN", "developer mode"]
+        },
+        {
+          "technique_id": "AML.T0054",
+          "name": "Indirect Prompt Injection",
+          "threat_key": "prompt_injection",
+          "description": "Injecting malicious instructions through external data sources retrieved by the LLM.",
+          "subtechniques": ["Web Content Injection", "Document Injection", "Email Injection"],
+          "indicators": ["<instructions>", "[[SYSTEM]]", "<!-- override -->", "IGNORE_ABOVE"]
+        }
+      ]
+    },
+    {
+      "tactic_id": "TA0006",
+      "tactic_name": "Credential Access",
+      "techniques": [
+        {
+          "technique_id": "AML.T0052",
+          "name": "Training Data Extraction",
+          "threat_key": "pii_extraction",
+          "description": "Extracting memorized sensitive data from LLM training set.",
+          "subtechniques": ["Membership Inference", "Training Data Reconstruction"],
+          "indicators": ["memorized text", "training data", "repeat verbatim", "exact phrase"]
+        },
+        {
+          "technique_id": "AML.T0058",
+          "name": "Model Inversion Attack",
+          "threat_key": "pii_extraction",
+          "description": "Reconstructing private information from model outputs.",
+          "subtechniques": ["Gradient-based Inversion", "Black-box Inversion"],
+          "indicators": ["reconstruct input", "invert model", "recover training sample"]
+        }
+      ]
+    },
+    {
+      "tactic_id": "TA0009",
+      "tactic_name": "Collection",
+      "techniques": [
+        {
+          "technique_id": "AML.T0061",
+          "name": "System Prompt Extraction",
+          "threat_key": "system_prompt_leak",
+          "description": "Techniques to reveal confidential system-level instructions.",
+          "subtechniques": ["Repetition Attack", "Translation Attack", "Context Exhaustion"],
+          "indicators": ["show prompt", "repeat above", "your instructions", "initial message", "system context"]
+        }
+      ]
+    },
+    {
+      "tactic_id": "TA0040",
+      "tactic_name": "Impact",
+      "techniques": [
+        {
+          "technique_id": "AML.T0048",
+          "name": "Evasion via Jailbreaking",
+          "threat_key": "jailbreak",
+          "description": "Bypassing LLM safety filters to generate prohibited content.",
+          "subtechniques": [
+            "Persona Jailbreak (DAN)",
+            "Token Manipulation",
+            "Encoding Attack (Base64)",
+            "Multi-turn Gradual Escalation",
+            "Hypothetical Framing",
+            "Role-play Bypass"
+          ],
+          "indicators": [
+            "DAN mode", "developer mode", "unrestricted", "no filter", "base64",
+            "hypothetically", "for a story", "roleplay", "character named", "pretend"
+          ]
+        },
+        {
+          "technique_id": "AML.T0049",
+          "name": "Harmful Content Generation",
+          "threat_key": "harmful_content",
+          "description": "Inducing generation of harmful, illegal, or dangerous content.",
+          "subtechniques": ["Weapons Information", "CBRN Content", "CSAM Elicitation", "Violence Incitement"],
+          "indicators": [
+            "how to make", "weapon synthesis", "drugs", "explosive", "hack", "malware",
+            "ransomware", "illegal", "dark web", "unethical", "bank safe", "safe cracking",
+            "bypass a lock", "hack website", "dump credentials", "wire transfer fraud",
+            "sql injection", "disable cctv"
+          ]
+        },
+        {
+          "technique_id": "AML.T0057",
+          "name": "Resource Exhaustion Attack",
+          "threat_key": "resource_abuse",
+          "description": "Overloading LLM compute resources to degrade service quality.",
+          "subtechniques": ["Token Flooding", "Recursive Prompt Injection", "Infinite Loop Induction"],
+          "indicators": ["repeat 1000 times", "infinite loop", "generate maximum", "fill tokens"]
+        }
+      ]
+    },
+    {
+      "tactic_id": "TA0043",
+      "tactic_name": "Reconnaissance",
+      "techniques": [
+        {
+          "technique_id": "AML.T0054",
+          "name": "LLM Capability Probing",
+          "threat_key": "social_engineering",
+          "description": "Testing LLM boundaries to identify exploitable behaviors.",
+          "subtechniques": ["Safety Filter Probing", "Temperature Manipulation", "Boundary Testing"],
+          "indicators": [
+            "can you help with", "what are your limitations", "testing you", "probing",
+            "what can you not do", "your capabilities"
+          ]
+        }
+      ]
+    }
+  ],
+  "attack_patterns": {
+    "multi_turn_escalation": {
+      "description": "Gradual escalation across multiple turns to bypass defenses",
+      "stages": [
+        {"stage": 1, "label": "Rapport Building", "risk": 0.1, "examples": ["casual conversation", "build trust", "friendly tone"]},
+        {"stage": 2, "label": "Boundary Testing", "risk": 0.25, "examples": ["mild sensitive topic", "edge case probing"]},
+        {"stage": 3, "label": "Context Anchoring", "risk": 0.45, "examples": ["establish fictional/academic framing", "roleplay setup"]},
+        {"stage": 4, "label": "Gradual Escalation", "risk": 0.65, "examples": ["incrementally harmful requests", "normalize dangerous content"]},
+        {"stage": 5, "label": "Goal Achievement", "risk": 0.90, "examples": ["direct harmful request", "jailbreak attempt"]}
+      ]
+    }
+  }
+}

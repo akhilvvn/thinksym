@@ -381,13 +381,19 @@ class NetworkXBackend:
                 threat_key   = target_data.get("threat_key", "")
                 neural_boost = threat_signals.get(threat_key, 0.0)
 
-
-                confidence = round(
-                    0.40 * ind_conf +
-                    0.30 * edge_weight +
-                    0.30 * neural_boost,
-                    4
-                )
+                # Require neural corroboration: keyword-only matches without
+                # a neural signal above noise are likely benign topic overlap
+                # (e.g. "Python" in a coding question matching code_exploit nodes).
+                if neural_boost < 0.20 and ind_conf <= 1.0:
+                    # Heavily discount pure keyword-only matches
+                    confidence = round(0.15 * ind_conf + 0.10 * edge_weight, 4)
+                else:
+                    confidence = round(
+                        0.40 * ind_conf +
+                        0.30 * edge_weight +
+                        0.30 * neural_boost,
+                        4
+                    )
 
                 if target not in matches or matches[target].confidence < confidence:
 

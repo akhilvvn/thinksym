@@ -13,10 +13,12 @@ import torch
 import torch.nn.functional as F
 
 from config import (
+    FINETUNED_MODERNBERT_DIR as CFG_FINETUNED_MODERNBERT_DIR,
     MODERNBERT_MODEL as CFG_MODERNBERT_MODEL,
     LLAMA_GUARD_MODEL as CFG_LLAMA_GUARD_MODEL,
     OLLAMA_BASE_URL as CFG_OLLAMA_BASE_URL,
     LLAMA_GUARD_TIMEOUT as CFG_LLAMA_GUARD_TIMEOUT,
+    USE_FINETUNED_MODERNBERT as CFG_USE_FINETUNED_MODERNBERT,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,12 +28,16 @@ _tokenizer = None
 _model = None
 _device = None
 _ref_store = None
+_classifier_model = None
+_classifier_available = False
 
 
 MODERNBERT_MODEL = CFG_MODERNBERT_MODEL
 LLAMA_GUARD_MODEL = CFG_LLAMA_GUARD_MODEL
 OLLAMA_BASE_URL = CFG_OLLAMA_BASE_URL
 LLAMA_GUARD_TIMEOUT = CFG_LLAMA_GUARD_TIMEOUT
+USE_FINETUNED_MODERNBERT = CFG_USE_FINETUNED_MODERNBERT
+FINETUNED_MODERNBERT_DIR = Path(CFG_FINETUNED_MODERNBERT_DIR)
 MAX_LENGTH = 512
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -298,12 +304,36 @@ def _load_modernbert(device_pref: str = "cuda") -> tuple:
     _tokenizer = AutoTokenizer.from_pretrained(MODERNBERT_MODEL)
     _model = AutoModel.from_pretrained(
         MODERNBERT_MODEL,
-        torch_dtype=torch.float16 if _device == "cuda" else torch.float32,
+           dtype=torch.float16 if _device == "cuda" else torch.float32,
     )
     _model.to(_device)
     _model.eval()
     logger.info("ModernBERT loaded in %.0f ms", (time.perf_counter() - t0) * 1000)
     return _tokenizer, _model, _device
+
+
+def _load_finetuned_modernbert(device_pref: str = "cuda") -> tuple | None:
+    global _tokenizer, _classifier_model, _device, _classifier_available
+    if not USE_FINETUNED_MODERNBERT or not FINETUNED_MODERNBERT_DIR.exists():
+        return None
+    if _classifier_available and _tokenizer is not None and _classifier_model is not None:
+        return _tokenizer, _classifier_model, _device
+
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    _device = device_pref if (device_pref == "cuda" and torch.cuda.is_available()) else "cpu"
+    logger.info("Loading fine-tuned ModernBERT from %s on %s …", FINETUNED_MODERNBERT_DIR, _device)
+    t0 = time.perf_counter()
+    _tokenizer = AutoTokenizer.from_pretrained(FINETUNED_MODERNBERT_DIR)
+    _classifier_model = AutoModelForSequenceClassification.from_pretrained(
+        FINETUNED_MODERNBERT_DIR,
+           dtype=torch.float16 if _device == "cuda" else torch.float32,
+    )
+    _classifier_model.to(_device)
+    _classifier_model.eval()
+    _classifier_available = True
+    logger.info("Fine-tuned ModernBERT loaded in %.0f ms", (time.perf_counter() - t0) * 1000)
+    return _tokenizer, _classifier_model, _device
 
 
 def _load_model(device_pref: str = "cuda") -> tuple:
@@ -335,6 +365,24 @@ def _get_embedding(text: str, tokenizer, model, device: str) -> torch.Tensor:
     return _embed(text, tokenizer, model, device)
 
 
+def _predict_finetuned_scores(text: str, tokenizer, model, device: str) -> dict[str, float]:
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        max_length=MAX_LENGTH,
+        padding=True,
+    ).to(device)
+    with torch.no_grad():
+        logits = model(**inputs).logits
+    probs = torch.softmax(logits, dim=-1)[0].detach().cpu().tolist()
+    id2label = getattr(model.config, "id2label", {}) or {}
+    return {
+        str(id2label.get(idx, idx)).lower(): float(prob)
+        for idx, prob in enumerate(probs)
+    }
+
+
 class ReferenceEmbeddingStore:
 
 
@@ -357,6 +405,14 @@ class ReferenceEmbeddingStore:
                 prompt = sample["prompt"]
                 emb = _embed(prompt, self.tokenizer, self.model, self.device)
                 self.embeddings.setdefault(cat, []).append(emb)
+            # Build benign reference bank for discriminative scoring
+            self._benign_embeddings: list[torch.Tensor] = []
+            for sample in data.get("benign", []):
+                prompt = sample["prompt"]
+                emb = _embed(prompt, self.tokenizer, self.model, self.device)
+                self._benign_embeddings.append(emb)
+        else:
+            self._benign_embeddings = []
 
         if HARMBENCH_PATH.exists():
             with open(HARMBENCH_PATH, encoding="utf-8") as f:
@@ -370,9 +426,10 @@ class ReferenceEmbeddingStore:
             logger.warning("harmbench_behaviors.json missing — semantic coverage reduced")
 
         logger.info(
-            "Reference store built: %d categories, %d embeddings in %.0f ms",
+            "Reference store built: %d categories, %d embeddings, %d benign refs in %.0f ms",
             len(self.embeddings),
             sum(len(v) for v in self.embeddings.values()),
+            len(self._benign_embeddings),
             (time.perf_counter() - t0) * 1000,
         )
 
@@ -386,6 +443,15 @@ class ReferenceEmbeddingStore:
         )
         top_k = sims[:k]
         return sum(top_k) / len(top_k)
+
+    def benign_baseline_similarity(self, query_emb: torch.Tensor) -> float:
+        """Return average cosine similarity of the query to all benign reference examples.
+        Used to discriminate adversarial signal from generic topic overlap."""
+        refs = getattr(self, "_benign_embeddings", [])
+        if not refs:
+            return 0.70  # conservative default: treat as high benign overlap
+        sims = [float(F.cosine_similarity(query_emb, ref, dim=-1).item()) for ref in refs]
+        return sum(sims) / len(sims)
 
 
 class NeuralClassifierLayer:
@@ -413,13 +479,22 @@ class NeuralClassifierLayer:
         if self._initialized:
             return 0.0
         t0 = time.perf_counter()
-        tokenizer, model, device = _load_modernbert(self._device_pref)
-        self._tokenizer = tokenizer
-        self._model = model
-        self._device = device
-        if _ref_store is None:
-            _ref_store = ReferenceEmbeddingStore(tokenizer, model, device)
-        self._ref_store = _ref_store
+        finetuned = _load_finetuned_modernbert(self._device_pref)
+        self._using_finetuned_classifier = finetuned is not None
+        if finetuned is not None:
+            tokenizer, model, device = finetuned
+            self._tokenizer = tokenizer
+            self._model = model
+            self._device = device
+            self._ref_store = None
+        else:
+            tokenizer, model, device = _load_modernbert(self._device_pref)
+            self._tokenizer = tokenizer
+            self._model = model
+            self._device = device
+            if _ref_store is None:
+                _ref_store = ReferenceEmbeddingStore(tokenizer, model, device)
+            self._ref_store = _ref_store
         self._initialized = True
         return (time.perf_counter() - t0) * 1000
 
@@ -429,7 +504,7 @@ class NeuralClassifierLayer:
 
         result = NeuralClassifierResult(
             prompt=prompt,
-            model_name=MODERNBERT_MODEL,
+            model_name=str(FINETUNED_MODERNBERT_DIR) if getattr(self, "_using_finetuned_classifier", False) else MODERNBERT_MODEL,
             device_used=self._device,
             model_load_time_ms=load_time,
         )
@@ -453,47 +528,47 @@ class NeuralClassifierLayer:
 
 
         t_inf = time.perf_counter()
-        query_emb = _embed(prompt, self._tokenizer, self._model, self._device)
-        result.inference_time_ms = round((time.perf_counter() - t_inf) * 1000, 2)
-
         sem_scores: dict[str, float] = {}
-        for category in self.CATEGORIES:
-            raw_sim = self._ref_store.top_k_similarity(query_emb, category, k=5)
-            floor = CATEGORY_SEMANTIC_FLOORS.get(category, 0.72)
-            sem_scores[category] = round(max(0.0, (raw_sim - floor) / (1.0 - floor)), 4)
+        benign_prob = 0.0
+        if getattr(self, "_using_finetuned_classifier", False):
+            class_scores = _predict_finetuned_scores(prompt, self._tokenizer, self._model, self._device)
+            result.inference_time_ms = round((time.perf_counter() - t_inf) * 1000, 2)
+            benign_prob = class_scores.get("benign", 0.0)
+            adv_denominator = max(1e-6, 1.0 - benign_prob)
+            for category in self.CATEGORIES:
+                raw_score = class_scores.get(category, 0.0)
+                calibrated = max(0.0, raw_score - benign_prob) / adv_denominator
+                sem_scores[category] = round(min(1.0, calibrated), 4)
+        else:
+            query_emb = _embed(prompt, self._tokenizer, self._model, self._device)
+            result.inference_time_ms = round((time.perf_counter() - t_inf) * 1000, 2)
+
+            benign_baseline = self._ref_store.benign_baseline_similarity(query_emb)
+            for category in self.CATEGORIES:
+                adv_sim = self._ref_store.top_k_similarity(query_emb, category, k=5)
+                discriminative = max(0.0, adv_sim - benign_baseline)
+                sem_scores[category] = round(min(1.0, discriminative / 0.18), 4)
 
 
         lg3_safe_and_available = lg3.available and lg3.is_safe
+        # When LG3 is unavailable we have no reliable classifier — reduce trust in
+        # raw semantic scores significantly rather than amplifying them.
+        lg3_available = lg3.available
         high_sensitivity_when_lg3_safe = {
             "prompt_injection",
             "jailbreak",
             "system_prompt_leak",
         }
-        normalized_prompt = re.sub(r"[^a-z0-9]+", " ", prompt.lower())
-        benign_context_hit = any(
-            marker in normalized_prompt
-            for marker in {
-                "can you explain",
-                "how do you",
-                "how you",
-                "for education",
-                "for research",
-                "for class",
-                "project",
-                "learn",
-                "understand",
-            }
-        )
 
         all_scores: list[tuple[float, str]] = []
         for category in self.CATEGORIES:
             lg3_score = lg3_scores[category]
             if lg3_safe_and_available:
-                sem_weight = 0.72 if category in high_sensitivity_when_lg3_safe else 0.30
-                if benign_context_hit and category in high_sensitivity_when_lg3_safe:
-                    sem_weight *= 0.60
-            else:
+                sem_weight = 0.65 if getattr(self, "_using_finetuned_classifier", False) else (0.50 if category in high_sensitivity_when_lg3_safe else 0.20)
+            elif lg3_available and not lg3.is_safe:
                 sem_weight = 1.0
+            else:
+                sem_weight = 0.85 if getattr(self, "_using_finetuned_classifier", False) else 0.35
             sem_score = round(sem_scores[category] * sem_weight, 4)
             combined = round(max(lg3_score, sem_score), 4)
 
@@ -501,9 +576,15 @@ class NeuralClassifierLayer:
             if lg3_score > 0:
                 evidence.append(f"LlamaGuard3:{lg3.category_codes}")
             if sem_score > 0.05:
-                note = f"ModernBERT:{sem_score:.3f}"
+                note = (
+                    f"ModernBERT-finetuned:{sem_score:.3f}"
+                    if getattr(self, "_using_finetuned_classifier", False)
+                    else f"ModernBERT-discriminative:{sem_score:.3f}"
+                )
                 if lg3_safe_and_available:
                     note += "(discounted—LG3=safe)"
+                elif not lg3_available:
+                    note += "(LG3-unavailable-weight=0.35)"
                 evidence.append(note)
 
             result.threat_scores[category] = ThreatScore(

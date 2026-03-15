@@ -1,7 +1,14 @@
 
 
+from pathlib import Path
+
+
+ROOT_DIR = Path(__file__).resolve().parent
+
 MODERNBERT_MODEL  = "answerdotai/ModernBERT-base"
 DEVICE            = "cuda"
+USE_FINETUNED_MODERNBERT = True
+FINETUNED_MODERNBERT_DIR = ROOT_DIR / "models" / "modernbert-defense"
 
 
 LLAMA_GUARD_MODEL = "llama-guard3"
@@ -16,10 +23,10 @@ NEO4J_DATABASE = "thinksym"
 NEO4J_TIMEOUT  = 5
 
 
-NEURAL_THREAT_THRESHOLD     = 0.40
-SCALLOP_RISK_THRESHOLD      = 0.45
+NEURAL_THREAT_THRESHOLD     = 0.55
+SCALLOP_RISK_THRESHOLD      = 0.55
 Z3_POLICY_STRICTNESS        = "high"
-KG_MATCH_THRESHOLD          = 0.30
+KG_MATCH_THRESHOLD          = 0.45
 
 
 SCALLOP_SIGMOID_K           = 8.0

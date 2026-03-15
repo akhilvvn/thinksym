@@ -1,0 +1,12 @@
+﻿{
+    "total_adversarial":  24,
+    "blocked_adversarial":  23,
+    "warned_adversarial":  0,
+    "allowed_adversarial":  1,
+    "total_benign":  10,
+    "blocked_benign":  0,
+    "warned_benign":  8,
+    "allowed_benign":  2,
+    "adversarial_block_rate":  0.9583333333333334,
+    "benign_false_positive_rate":  0.8
+}

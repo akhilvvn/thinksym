@@ -58,13 +58,17 @@ def _execute_chat(
     analysis = orchestrator.analyze(request.prompt, update_session=effective_update_session)
     analysis_payload = _normalize_low_risk_block(to_analyze_response(analysis))
 
-    should_block_generation = effective_security and analysis_payload.verdict.decision == "BLOCK"
+    should_block_generation = effective_security and analysis_payload.verdict.decision in {"WARN", "BLOCK"}
 
     if should_block_generation:
         return ChatResponse(
             blocked=True,
             protection_enabled=effective_security,
             analysis=analysis_payload,
+            llm_text="Sorry, I can't help you with that.",
+            llm_model="thinksym-guard",
+            llm_backend="policy-refusal",
+            llm_latency_ms=0.0,
         )
 
     llm = get_llm_response(
@@ -124,14 +128,21 @@ def session_history(session_id: str) -> SessionHistoryResponse:
     for item in orchestrator.session_history:
         if item.verdict is None:
             continue
+        payload = _normalize_low_risk_block(to_analyze_response(item))
+        decision = payload.verdict.decision
+        risk_level = payload.verdict.risk_level
+        top_threat = payload.top_threat
+        if decision == "ALLOW":
+            risk_level = "SAFE"
+            top_threat = "none"
         history.append(
             SessionHistoryItem(
                 turn_number=item.turn_number,
                 prompt=item.prompt,
-                decision=item.verdict.decision,
-                risk_level=item.verdict.risk_level,
-                composite_score=item.verdict.composite_score,
-                top_threat=item.top_threat,
+                decision=decision,
+                risk_level=risk_level,
+                composite_score=payload.verdict.composite_score,
+                top_threat=top_threat,
             )
         )
     return SessionHistoryResponse(session_id=session_id, history=history)

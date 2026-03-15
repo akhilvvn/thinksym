@@ -143,7 +143,7 @@ def _pairwise_compound_score(neural_scores: dict[str, float]) -> tuple[float, li
             if s1 < 0.10 and s2 < 0.10:
                 continue
 
-            moderate_bonus = 0.10 if (s1 >= 0.28 and s2 >= 0.28) else 0.0
+            moderate_bonus = 0.10 if (s1 >= 0.45 and s2 >= 0.45) else 0.0
             pair = _clamp01((s1 * s2) + moderate_bonus)
             if pair > 0.08:
                 pair_scores.append((cat1, cat2, round(pair, 4)))

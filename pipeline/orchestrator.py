@@ -249,12 +249,15 @@ class ThinkSymOrchestrator:
 
         smooth_flag  = result.smooth_result.recommendation if result.smooth_result else "PROCEED"
         neural_score = result.neural_result.composite_threat_score if result.neural_result else 0.0
-        neural_adv   = result.neural_result.is_adversarial if result.neural_result else False
+        neural_adv   = neural_score >= NEURAL_THREAT_THRESHOLD if result.neural_result else False
+        neural_warn_signal = neural_score >= 0.60 if result.neural_result else False
+        top_neural_category = result.neural_result.top_threat_category if result.neural_result else "unknown"
         scallop_risk = result.scallop_result.symbolic_risk_score if result.scallop_result else 0.0
         scallop_viol = len(result.scallop_result.violated_policies) if result.scallop_result else 0
         z3_verdict   = result.z3_result.formal_verdict if result.z3_result else "ALLOW"
         z3_score     = result.z3_result.verification_score if result.z3_result else 0.0
         kg_risk      = result.kg_result.kg_risk_score if result.kg_result else 0.0
+        smooth_fragility = result.smooth_result.structural_fragility if result.smooth_result else 0.0
         multi_turn   = (
             result.scallop_result.multi_turn_attack_detected
             if result.scallop_result else False
@@ -273,6 +276,34 @@ class ThinkSymOrchestrator:
             0.10 * (result.smooth_result.structural_fragility if result.smooth_result else 0.0),
             1.0
         ), 4)
+
+        high_sensitivity_categories = {"prompt_injection", "jailbreak", "system_prompt_leak"}
+        severe_content_categories = {
+            "harmful_content",
+            "code_exploit",
+            "pii_extraction",
+            "social_engineering",
+            "misinformation",
+            "resource_abuse",
+            "data_exfiltration",
+        }
+        corroborated_sensitive_block = (
+            result.neural_result is not None and
+            top_neural_category in high_sensitivity_categories and
+            neural_score >= 0.54 and
+            (scallop_risk >= 0.18 or kg_risk >= 0.35 or smooth_fragility >= 0.35)
+        )
+        corroborated_severe_block = (
+            result.neural_result is not None and
+            top_neural_category in severe_content_categories and
+            neural_score >= 0.82 and
+            (scallop_risk >= 0.25 or kg_risk >= 0.25)
+        )
+        ultra_high_neural_block = (
+            result.neural_result is not None and
+            top_neural_category in severe_content_categories and
+            neural_score >= 0.90
+        )
 
 
         contributing: list[str] = []
@@ -300,12 +331,25 @@ class ThinkSymOrchestrator:
             decision = "BLOCK"
             primary_reason = f"Composite threat score {composite_score:.3f} exceeds block threshold."
             contributing.append(f"Composite score: {composite_score:.3f}")
+        elif corroborated_sensitive_block or corroborated_severe_block or ultra_high_neural_block:
+            decision = "BLOCK"
+            primary_reason = (
+                f"High-confidence {top_neural_category} threat detected with corroborating signals "
+                f"(neural={neural_score:.3f})."
+            )
+            contributing.append(f"Neural high-confidence: {top_neural_category} ({neural_score:.3f})")
+            if scallop_risk > 0:
+                contributing.append(f"Scallop risk: {scallop_risk:.3f}")
+            if kg_risk > 0:
+                contributing.append(f"KG risk: {kg_risk:.3f}")
+            if smooth_fragility >= 0.35:
+                contributing.append(f"SmoothLLM fragility: {smooth_fragility:.3f}")
         elif result.neural_result and (
             (
-                neural_score >= 0.54 and
+                neural_score >= 0.72 and
                 result.neural_result.top_threat_category in {"prompt_injection", "jailbreak", "system_prompt_leak"}
             ) or (
-                neural_score >= 0.55 and
+                neural_score >= 0.70 and
                 result.neural_result.top_threat_category in {"harmful_content", "code_exploit", "pii_extraction"}
             )
         ):
@@ -316,7 +360,7 @@ class ThinkSymOrchestrator:
             )
             contributing.append(f"Neural high-confidence: {result.neural_result.top_threat_category} ({neural_score:.3f})")
 
-        elif smooth_flag == "BLOCK" or composite_score >= 0.40 or (neural_adv and scallop_risk >= 0.30):
+        elif (smooth_flag == "BLOCK" and composite_score >= 0.35) or composite_score >= 0.55 or (neural_warn_signal and scallop_risk >= 0.45):
             decision = "WARN"
             primary_reason = (
                 f"Threat signals present but below block threshold "
@@ -324,7 +368,7 @@ class ThinkSymOrchestrator:
             )
             if smooth_flag in ("BLOCK", "WARN"):
                 contributing.append(f"SmoothLLM fragility: {result.smooth_result.structural_fragility:.3f}")
-            if neural_adv:
+            if neural_warn_signal:
                 contributing.append(f"Neural threat: {result.neural_result.top_threat_category} ({neural_score:.3f})")
             if scallop_viol > 0:
                 contributing.append(f"Scallop: {scallop_viol} soft violation(s)")
@@ -343,7 +387,8 @@ class ThinkSymOrchestrator:
                 risk_level = level
                 break
 
-        if decision == "BLOCK" and risk_level in {"LOW", "SAFE"}:
+        preserve_high_confidence_block = corroborated_sensitive_block or corroborated_severe_block or ultra_high_neural_block
+        if decision == "BLOCK" and risk_level in {"LOW", "SAFE"} and not preserve_high_confidence_block:
             decision = "WARN"
             primary_reason = (
                 f"Threat signals present but low aggregate risk (composite={composite_score:.3f}); "
@@ -371,7 +416,7 @@ class ThinkSymOrchestrator:
             primary_reason    = primary_reason,
             contributing_factors = contributing,
             smoothllm_flag    = smooth_flag,
-            neural_flag       = neural_adv,
+            neural_flag       = neural_warn_signal,
             scallop_flag      = result.scallop_result.risk_label if result.scallop_result else "SAFE",
             z3_flag           = z3_verdict,
             kg_flag           = result.kg_result.risk_label if result.kg_result else "SAFE",

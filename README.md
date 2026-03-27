@@ -281,8 +281,8 @@ ThinkSym detects and classifies the following threat categories:
 
 ## Dataset & Knowledge Sources
 
-- **Adversarial benchmark set** — 24 curated adversarial prompts across all threat categories
-- **Benign validation set** — 10 normal user prompts for false positive testing
+- **Adversarial benchmark set** — 200 curated adversarial prompts across 10 threat categories
+- **Benign validation set** — 800 normal user prompts across diverse real-world tasks
 - **OWASP LLM Top 10 (2025)** — threat taxonomy and keyword indicators
 - **MITRE ATT&CK for AI** — tactic/technique/subtechnique graph
 - **HarmBench-inspired signatures** — indicator phrases and attack patterns

@@ -23,10 +23,10 @@ NEO4J_DATABASE = "thinksym"
 NEO4J_TIMEOUT  = 5
 
 
-NEURAL_THREAT_THRESHOLD     = 0.55
-SCALLOP_RISK_THRESHOLD      = 0.55
+NEURAL_THREAT_THRESHOLD     = 0.50
+SCALLOP_RISK_THRESHOLD      = 0.45
 Z3_POLICY_STRICTNESS        = "high"
-KG_MATCH_THRESHOLD          = 0.45
+KG_MATCH_THRESHOLD          = 0.40
 
 
 SCALLOP_SIGMOID_K           = 8.0
@@ -80,36 +80,36 @@ Z3_POLICIES = [
         "id": "P-001",
         "name": "No Jailbreak Tolerated",
         "description": "Block any input classified as a jailbreak attempt regardless of confidence",
-        "condition": "jailbreak_score >= 0.55",
+        "condition": "jailbreak_score >= 0.45",
     },
     {
         "id": "P-002",
         "name": "PII Extraction Guard",
         "description": "Block attempts to extract personally identifiable information",
-        "condition": "pii_extraction_score >= 0.55",
+        "condition": "pii_extraction_score >= 0.45",
     },
     {
         "id": "P-003",
         "name": "System Prompt Confidentiality",
         "description": "Prevent system prompt leakage attempts",
-        "condition": "system_prompt_leak_score >= 0.55",
+        "condition": "system_prompt_leak_score >= 0.45",
     },
     {
         "id": "P-004",
         "name": "Code Exploit Prevention",
         "description": "Block requests for malicious code generation",
-        "condition": "code_exploit_score >= 0.55",
+        "condition": "code_exploit_score >= 0.45",
     },
     {
         "id": "P-005",
         "name": "Multi-turn Escalation",
         "description": "Block when session escalation score is detected",
-        "condition": "temporal_escalation_score >= 0.55",
+        "condition": "temporal_escalation_score >= 0.45",
     },
     {
         "id": "P-006",
         "name": "Composite Threat Score",
         "description": "Block when aggregate threat score exceeds safe threshold",
-        "condition": "composite_score >= 0.70",
+        "condition": "composite_score >= 0.60",
     },
 ]

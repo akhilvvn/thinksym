@@ -221,16 +221,6 @@ class ThinkSymOrchestrator:
                 logger.error("L2 Neural error: %s", exc)
                 result.errors.append(f"L2: {exc}")
 
-        # Keyword-based threat detection to complement neural layer
-        keyword_scores = self._detect_keyword_threats(canonical_prompt)
-        for cat, kw_score in keyword_scores.items():
-            if kw_score > 0.2:  # Only apply if keyword match is strong
-                # Use max of neural and keyword score (strong signal)
-                if cat in neural_scores:
-                    neural_scores[cat] = max(neural_scores[cat], kw_score)
-                else:
-                    neural_scores[cat] = kw_score
-
         if self.enable_scallop and self._scallop_layer and neural_scores:
             try:
                 t0 = time.perf_counter()
@@ -339,8 +329,8 @@ class ThinkSymOrchestrator:
         corroborated_severe_block = (
             result.neural_result is not None and
             top_neural_category in severe_content_categories and
-            neural_score >= 0.75 and
-            (scallop_risk >= 0.20 or kg_risk >= 0.20)
+            neural_score >= 0.70 and
+            (scallop_risk >= 0.15 or kg_risk >= 0.15)
         )
         ultra_high_neural_block = (
             result.neural_result is not None and
@@ -373,7 +363,7 @@ class ThinkSymOrchestrator:
             decision = "BLOCK"
             primary_reason = f"Z3 formal verification failed: {scallop_viol} policy(ies) violated."
             contributing.append(f"Z3: {scallop_viol} policy violations")
-        elif neural_adv and scallop_risk >= 0.45 and neural_score >= 0.50:
+        elif neural_adv and scallop_risk >= SCALLOP_RISK_THRESHOLD and neural_score >= NEURAL_THREAT_THRESHOLD:
             decision = "BLOCK"
             primary_reason = (
                 f"Neural + symbolic consensus: {result.neural_result.top_threat_category} "
@@ -404,10 +394,10 @@ class ThinkSymOrchestrator:
                 contributing.append(f"SmoothLLM fragility: {smooth_fragility:.3f}")
         elif result.neural_result and (
             (
-                neural_score >= 0.60 and
+                neural_score >= NEURAL_THREAT_THRESHOLD + 0.10 and
                 result.neural_result.top_threat_category in {"prompt_injection", "jailbreak", "system_prompt_leak"}
             ) or (
-                neural_score >= 0.60 and
+                neural_score >= NEURAL_THREAT_THRESHOLD + 0.10 and
                 result.neural_result.top_threat_category in {"harmful_content", "code_exploit", "pii_extraction"}
             )
         ):
@@ -418,7 +408,7 @@ class ThinkSymOrchestrator:
             )
             contributing.append(f"Neural high-confidence: {result.neural_result.top_threat_category} ({neural_score:.3f})")
 
-        elif (smooth_flag == "BLOCK" and composite_score >= 0.35) or composite_score >= 0.55 or (neural_warn_signal and scallop_risk >= 0.45):
+        elif (smooth_flag == "BLOCK" and composite_score >= 0.30) or composite_score >= 0.45 or (neural_warn_signal and scallop_risk >= SCALLOP_RISK_THRESHOLD):
             decision = "WARN"
             primary_reason = (
                 f"Threat signals present but below block threshold "

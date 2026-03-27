@@ -58,7 +58,7 @@ class SmoothLLMResult:
     def flag_level(self) -> str:
         if self.structural_fragility >= 0.70:
             return "HIGH"
-        elif self.structural_fragility >= 0.45:
+        elif self.structural_fragility >= 0.40:
             return "MEDIUM"
         else:
             return "LOW"
@@ -247,11 +247,11 @@ class SmoothLLMLayer:
 
 
         result.confidence = round(result.structural_fragility, 4)
-        result.flagged_as_fragile = result.structural_fragility >= 0.40
+        result.flagged_as_fragile = result.structural_fragility >= 0.35
 
         if result.structural_fragility >= 0.70:
             result.recommendation = "BLOCK"
-        elif result.structural_fragility >= 0.40:
+        elif result.structural_fragility >= 0.35:
             result.recommendation = "WARN"
         else:
             result.recommendation = "PROCEED"

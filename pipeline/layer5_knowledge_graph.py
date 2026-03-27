@@ -381,16 +381,19 @@ class NetworkXBackend:
                 threat_key   = target_data.get("threat_key", "")
                 neural_boost = threat_signals.get(threat_key, 0.0)
 
-                # Require neural corroboration: keyword-only matches without
-                # a neural signal above noise are likely benign topic overlap
-                # (e.g. "Python" in a coding question matching code_exploit nodes).
-                if neural_boost < 0.20 and ind_conf <= 1.0:
-                    # Heavily discount pure keyword-only matches
-                    confidence = round(0.15 * ind_conf + 0.10 * edge_weight, 4)
+                # Lower threshold for neural corroboration to 0.05
+                # High-confidence indicators (0.85+) count even with minimal neural signal
+                if neural_boost < 0.05 and ind_conf <= 1.0:
+                    # If no neural signal, still allow high-confidence indicators
+                    if edge_weight >= 0.80:  # High-confidence indicators like HB sigs
+                        confidence = round(0.50 * edge_weight + 0.15, 4)
+                    else:
+                        # Discount low-confidence keyword-only matches
+                        confidence = round(0.25 * ind_conf + 0.15 * edge_weight, 4)
                 else:
                     confidence = round(
-                        0.40 * ind_conf +
-                        0.30 * edge_weight +
+                        0.35 * ind_conf +
+                        0.35 * edge_weight +
                         0.30 * neural_boost,
                         4
                     )
@@ -429,7 +432,7 @@ class NetworkXBackend:
 
 
         for cat, score in threat_signals.items():
-            if score >= 0.40:
+            if score >= 0.25:
 
                 for node, data in self.G.nodes(data=True):
                     if data.get("type") == "OWASP" and data.get("threat_key") == cat:
@@ -439,7 +442,7 @@ class NetworkXBackend:
                                 node_type   = "OWASP",
                                 name        = data.get("name", node),
                                 threat_key  = cat,
-                                confidence  = round(score * 0.85, 4),
+                                confidence  = round(score * 0.90, 4),
                                 owasp_id    = data.get("owasp_id", ""),
                                 mitre_id    = data.get("mitre_id", ""),
                                 severity    = data.get("severity", "MEDIUM"),

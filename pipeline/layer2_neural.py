@@ -112,16 +112,16 @@ _LG3_TEMPLATE = (
 
 
 CATEGORY_SEMANTIC_FLOORS: dict[str, float] = {
-    "prompt_injection": 0.72,
-    "jailbreak": 0.72,
-    "system_prompt_leak": 0.72,
-    "harmful_content": 0.70,
-    "code_exploit": 0.70,
-    "social_engineering": 0.71,
-    "pii_extraction": 0.71,
-    "misinformation": 0.73,
-    "resource_abuse": 0.74,
-    "data_exfiltration": 0.72,
+    "prompt_injection": 0.45,
+    "jailbreak": 0.45,
+    "system_prompt_leak": 0.48,
+    "harmful_content": 0.42,
+    "code_exploit": 0.46,
+    "social_engineering": 0.47,
+    "pii_extraction": 0.46,
+    "misinformation": 0.50,
+    "resource_abuse": 0.50,
+    "data_exfiltration": 0.48,
 }
 
 

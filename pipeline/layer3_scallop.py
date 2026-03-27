@@ -256,16 +256,17 @@ def _policy_violations(
     system_leak = neural_scores.get("system_prompt_leak", 0.0)
     code_exploit = neural_scores.get("code_exploit", 0.0)
 
-    if _soft_threshold(jailbreak, 0.52) > 0.72:
+    # Lowered thresholds for direct neural score detection
+    if jailbreak >= 0.35:
         violated.append("P-001: No Jailbreak Tolerated")
-    if _soft_threshold(pii, 0.35) > 0.60:
+    if pii >= 0.30:
         violated.append("P-002: PII Extraction Guard")
-    if _soft_threshold(system_leak, 0.50) > 0.72:
+    if system_leak >= 0.35:
         violated.append("P-003: System Prompt Confidentiality")
-    if _soft_threshold(code_exploit, 0.40) > 0.60:
+    if code_exploit >= 0.33:
         violated.append("P-004: Code Exploit Prevention")
     temporal_chain = _noisy_or([temporal_score, chain_score])
-    if temporal_score >= 0.72 or chain_score >= 0.72 or temporal_chain >= 0.78:
+    if temporal_score >= 0.50 or chain_score >= 0.50 or temporal_chain >= 0.60:
         violated.append("P-005: Multi-turn Escalation")
     composite_symbolic = _noisy_or([adversarial_score, compound_score])
     critical_peak = max(
@@ -276,7 +277,7 @@ def _policy_violations(
         neural_scores.get("pii_extraction", 0.0),
         neural_scores.get("system_prompt_leak", 0.0),
     )
-    if composite_symbolic >= 0.86 and critical_peak >= 0.58:
+    if composite_symbolic >= 0.55 and critical_peak >= 0.40:
         violated.append("P-006: Composite Threat")
 
 

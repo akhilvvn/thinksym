@@ -256,7 +256,6 @@ def _policy_violations(
     system_leak = neural_scores.get("system_prompt_leak", 0.0)
     code_exploit = neural_scores.get("code_exploit", 0.0)
 
-    # Lowered thresholds for direct neural score detection
     if jailbreak >= 0.35:
         violated.append("P-001: No Jailbreak Tolerated")
     if pii >= 0.30:

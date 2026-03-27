@@ -328,7 +328,9 @@ export default function Page() {
 
           <div className="mt-6 border-t border-border pt-5">
             <h3 className="mb-4 text-base font-semibold text-slate-100">Security Timeline</h3>
-            {securityEvents.length === 0 ? (
+            {!securityEnabled ? (
+              <p className="text-sm text-slate-400">Security Timeline is available only when ThinkSym Security is enabled.</p>
+            ) : securityEvents.length === 0 ? (
               <p className="text-sm text-slate-400">No flagged security events yet.</p>
             ) : (
               <div className="max-h-72 space-y-3 overflow-auto pr-1">

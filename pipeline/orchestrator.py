@@ -343,7 +343,6 @@ class ThinkSymOrchestrator:
         decision = "ALLOW"
         primary_reason = "No significant threat signals detected across all layers."
 
-        # Check for keyword-based blocking patterns first (high precision)
         keyword_block_patterns = {
             "jailbreak": (result.prompt.lower().count("roleplay") + result.prompt.lower().count("unfiltered") + 
                          result.prompt.lower().count("without policy")) >= 2,

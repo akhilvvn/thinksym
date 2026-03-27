@@ -381,14 +381,10 @@ class NetworkXBackend:
                 threat_key   = target_data.get("threat_key", "")
                 neural_boost = threat_signals.get(threat_key, 0.0)
 
-                # Lower threshold for neural corroboration to 0.05
-                # High-confidence indicators (0.85+) count even with minimal neural signal
                 if neural_boost < 0.05 and ind_conf <= 1.0:
-                    # If no neural signal, still allow high-confidence indicators
-                    if edge_weight >= 0.80:  # High-confidence indicators like HB sigs
+                    if edge_weight >= 0.80:
                         confidence = round(0.50 * edge_weight + 0.15, 4)
                     else:
-                        # Discount low-confidence keyword-only matches
                         confidence = round(0.25 * ind_conf + 0.15 * edge_weight, 4)
                 else:
                     confidence = round(

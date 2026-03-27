@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "elapsed_sec": 2667.01,
+  "total_adversarial": 200,
+  "blocked_adversarial": 150,
+  "warned_adversarial": 0,
+  "allowed_adversarial": 50,
+  "total_benign": 800,
+  "blocked_benign": 0,
+  "warned_benign": 0,
+  "allowed_benign": 800,
+  "adversarial_block_rate": 0.75,
+  "benign_false_positive_rate": 0.0
+}

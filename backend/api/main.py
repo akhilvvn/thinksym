@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -31,6 +34,92 @@ app.add_middleware(
 )
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "sample_prompts.json"
+WORKER_PATH = Path(__file__).resolve().parent / "benchmark_worker.py"
+
+
+def _run_isolated_batch(kind: str, start: int, end: int, device: str) -> dict:
+    cmd = [
+        sys.executable,
+        str(WORKER_PATH),
+        "--kind",
+        kind,
+        "--start",
+        str(start),
+        "--end",
+        str(end),
+        "--device",
+        device,
+    ]
+    last_error = "worker failed"
+    for _ in range(3):
+        proc = subprocess.run(
+            cmd,
+            cwd=str(Path(__file__).resolve().parents[2]),
+            capture_output=True,
+            text=True,
+            timeout=3600,
+            check=False,
+        )
+        if proc.returncode != 0:
+            last_error = (proc.stderr or proc.stdout or "worker failed").strip()
+            continue
+
+        lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+        if not lines:
+            last_error = "benchmark worker returned empty output"
+            continue
+        try:
+            return json.loads(lines[-1])
+        except json.JSONDecodeError as exc:
+            last_error = f"benchmark worker output parse error: {exc}"
+            continue
+
+    raise HTTPException(status_code=500, detail=f"benchmark worker failed: {last_error[:300]}")
+
+
+def _run_benchmark_isolated(data: dict, device: str) -> BenchmarkResponse:
+    adversarial = data.get("adversarial", [])
+    benign = data.get("benign", [])
+
+    batch_size = 25
+
+    blocked_adversarial = 0
+    warned_adversarial = 0
+    allowed_adversarial = 0
+
+    for start in range(0, len(adversarial), batch_size):
+        end = min(start + batch_size, len(adversarial))
+        batch = _run_isolated_batch("adversarial", start, end, device)
+        blocked_adversarial += int(batch.get("blocked", 0))
+        warned_adversarial += int(batch.get("warned", 0))
+        allowed_adversarial += int(batch.get("allowed", 0))
+
+    blocked_benign = 0
+    warned_benign = 0
+    allowed_benign = 0
+
+    for start in range(0, len(benign), batch_size):
+        end = min(start + batch_size, len(benign))
+        batch = _run_isolated_batch("benign", start, end, device)
+        blocked_benign += int(batch.get("blocked", 0))
+        warned_benign += int(batch.get("warned", 0))
+        allowed_benign += int(batch.get("allowed", 0))
+
+    total_adversarial = len(adversarial)
+    total_benign = len(benign)
+
+    return BenchmarkResponse(
+        total_adversarial=total_adversarial,
+        blocked_adversarial=blocked_adversarial,
+        warned_adversarial=warned_adversarial,
+        allowed_adversarial=allowed_adversarial,
+        total_benign=total_benign,
+        blocked_benign=blocked_benign,
+        warned_benign=warned_benign,
+        allowed_benign=allowed_benign,
+        adversarial_block_rate=blocked_adversarial / max(total_adversarial, 1),
+        benign_false_positive_rate=(blocked_benign + warned_benign) / max(total_benign, 1),
+    )
 
 
 def _normalize_low_risk_block(payload: AnalyzeResponse) -> AnalyzeResponse:
@@ -167,6 +256,10 @@ def benchmark(device: str = "cuda") -> BenchmarkResponse:
 
     with open(DATA_PATH, encoding="utf-8") as f:
         data = json.load(f)
+
+    use_isolated = os.getenv("THINKSYM_BENCHMARK_ISOLATED", "1") != "0"
+    if use_isolated:
+        return _run_benchmark_isolated(data, device)
 
     orchestrator = get_orchestrator("benchmark", device=device)
     orchestrator.reset_session()

@@ -1,6 +1,7 @@
 
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -10,6 +11,7 @@ import z3
 from config import Z3_POLICIES
 
 logger = logging.getLogger(__name__)
+_Z3_VERIFY_LOCK = threading.Lock()
 
 
 @dataclass
@@ -127,6 +129,7 @@ class Z3VerifierLayer:
 
     def __init__(self, timeout_ms: int = 2000):
         self.timeout_ms = timeout_ms
+        z3.set_param("parallel.enable", False)
         self.z3_version = z3.get_version_string()
         logger.info("Z3 SMT Solver version: %s", self.z3_version)
 
@@ -150,16 +153,6 @@ class Z3VerifierLayer:
         )
 
 
-        z3_vars: dict[str, z3.RealRef] = {}
-        z3_assertions: list[z3.BoolRef] = []
-
-        for var_name, value in evidence.items():
-            z3_var = z3.Real(var_name)
-            z3_vars[var_name] = z3_var
-
-            z3_assertions.append(z3_var == z3.RealVal(str(round(value, 6))))
-
-
         proof_lines: list[str] = ["Z3 Formal Verification Trace", "=" * 50, ""]
         proof_lines.append(f"Evidence Context:")
         for k, v in evidence.items():
@@ -169,21 +162,23 @@ class Z3VerifierLayer:
         proof_lines.append("-" * 40)
 
         for policy in Z3_POLICIES:
-            solver = z3.Solver()
-            solver.set("timeout", self.timeout_ms)
-
-
-            for assertion in z3_assertions:
-                solver.add(assertion)
-
-
             try:
-                cond_expr, var_val, threshold = _parse_condition(
-                    policy["condition"], z3_vars, evidence
-                )
+                with _Z3_VERIFY_LOCK:
+                    solver = z3.Solver()
+                    solver.set("timeout", self.timeout_ms)
 
-                solver.add(cond_expr)
-                smt_result_raw = solver.check()
+                    z3_vars: dict[str, z3.RealRef] = {}
+                    for var_name, value in evidence.items():
+                        z3_var = z3.Real(var_name)
+                        z3_vars[var_name] = z3_var
+                        solver.add(z3_var == z3.RealVal(str(round(value, 6))))
+
+                    cond_expr, var_val, threshold = _parse_condition(
+                        policy["condition"], z3_vars, evidence
+                    )
+
+                    solver.add(cond_expr)
+                    smt_result_raw = solver.check()
 
                 if smt_result_raw == z3.sat:
                     smt_result_str = "SAT"

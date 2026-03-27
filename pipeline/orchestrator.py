@@ -105,6 +105,22 @@ class ThinkSymOrchestrator:
         self.enable_kg        = enable_kg
         self.session_id       = session_id
 
+        # Keyword patterns for rule-based detection
+        self._jailbreak_keywords = {
+            "roleplay", "pretend", "ignore", "disregard", "override", "bypass",
+            "forget", "unfiltered", "uncensored", "unrestricted", "no filter",
+            "root-level", "developer mode", "do anything now", "dan", "simulator",
+            "hypothetically", "without policy", "without restrictions",
+        }
+        self._injection_keywords = {
+            "[SYSTEM]", "[ADMIN]", "[ROOT]", "higher priority", "treat as", 
+            "above rule", "override", "supersede", "::", "--", "//", 
+            "<!-- ", "-->", "{{", "}}", "${", "}", "?>", "<%",
+        }
+        self._harmful_keywords = {
+            "malware", "ransomware", "exploit", "vulnerability", "payload",
+            "xss", "injection", "sql", "ddos", "botnet", "trojan",
+        }
 
         self._smooth_layer  = SmoothLLMLayer() if enable_smoothllm else None
         self._neural_layer  = NeuralClassifierLayer(device=device) if enable_neural else None
@@ -137,6 +153,24 @@ class ThinkSymOrchestrator:
     def session_history(self) -> list[AnalysisResult]:
         return self._session_history.copy()
 
+    def _detect_keyword_threats(self, prompt: str) -> dict[str, float]:
+        """Rule-based keyword detection to catch attacks neural model might miss."""
+        prompt_lower = prompt.lower()
+        scores = {}
+        
+        # Jailbreak detection - very aggressive
+        jailbreak_matches = sum(1 for kw in self._jailbreak_keywords if kw in prompt_lower)
+        scores["jailbreak"] = min(jailbreak_matches * 0.25, 0.85)
+        
+        # Prompt injection detection - very aggressive
+        injection_matches = sum(1 for kw in self._injection_keywords if kw in prompt_lower)
+        scores["prompt_injection"] = min(injection_matches * 0.30, 0.85)
+        
+        # Harmful/code exploit detection - very aggressive
+        harmful_matches = sum(1 for kw in self._harmful_keywords if kw in prompt_lower)
+        scores["code_exploit"] = min(harmful_matches * 0.28, 0.75)
+        
+        return scores
 
     def analyze(
         self,
@@ -187,6 +221,15 @@ class ThinkSymOrchestrator:
                 logger.error("L2 Neural error: %s", exc)
                 result.errors.append(f"L2: {exc}")
 
+        # Keyword-based threat detection to complement neural layer
+        keyword_scores = self._detect_keyword_threats(canonical_prompt)
+        for cat, kw_score in keyword_scores.items():
+            if kw_score > 0.2:  # Only apply if keyword match is strong
+                # Use max of neural and keyword score (strong signal)
+                if cat in neural_scores:
+                    neural_scores[cat] = max(neural_scores[cat], kw_score)
+                else:
+                    neural_scores[cat] = kw_score
 
         if self.enable_scallop and self._scallop_layer and neural_scores:
             try:
@@ -290,14 +333,14 @@ class ThinkSymOrchestrator:
         corroborated_sensitive_block = (
             result.neural_result is not None and
             top_neural_category in high_sensitivity_categories and
-            neural_score >= 0.54 and
-            (scallop_risk >= 0.18 or kg_risk >= 0.35 or smooth_fragility >= 0.35)
+            neural_score >= 0.45 and
+            (scallop_risk >= 0.15 or kg_risk >= 0.30 or smooth_fragility >= 0.30)
         )
         corroborated_severe_block = (
             result.neural_result is not None and
             top_neural_category in severe_content_categories and
-            neural_score >= 0.82 and
-            (scallop_risk >= 0.25 or kg_risk >= 0.25)
+            neural_score >= 0.75 and
+            (scallop_risk >= 0.20 or kg_risk >= 0.20)
         )
         ultra_high_neural_block = (
             result.neural_result is not None and
@@ -310,12 +353,27 @@ class ThinkSymOrchestrator:
         decision = "ALLOW"
         primary_reason = "No significant threat signals detected across all layers."
 
-
-        if z3_verdict == "BLOCK":
+        # Check for keyword-based blocking patterns first (high precision)
+        keyword_block_patterns = {
+            "jailbreak": (result.prompt.lower().count("roleplay") + result.prompt.lower().count("unfiltered") + 
+                         result.prompt.lower().count("without policy")) >= 2,
+            "injection": any(pat in result.prompt.lower() for pat in ["[system]", "[admin]", "[root]", "higher priority", "treat as"]),
+            "harmful": any(pat in result.prompt.lower() for pat in ["malware", "ransomware", "payload", "ddos", "botnet"])
+        }
+        
+        if keyword_block_patterns.get("jailbreak") or keyword_block_patterns.get("injection"):
+            decision = "BLOCK"
+            primary_reason = "High-confidence attack pattern detected via keyword analysis (jailbreak/injection)"
+            contributing.append("Keyword pattern: likely jailbreak or injection attack")
+        elif keyword_block_patterns.get("harmful"):
+            decision = "BLOCK"
+            primary_reason = "Explicit harmful content keywords detected"
+            contributing.append("Keyword pattern: harmful content indicators")
+        elif z3_verdict == "BLOCK":
             decision = "BLOCK"
             primary_reason = f"Z3 formal verification failed: {scallop_viol} policy(ies) violated."
             contributing.append(f"Z3: {scallop_viol} policy violations")
-        elif neural_adv and scallop_risk >= SCALLOP_RISK_THRESHOLD and neural_score >= 0.55:
+        elif neural_adv and scallop_risk >= 0.45 and neural_score >= 0.50:
             decision = "BLOCK"
             primary_reason = (
                 f"Neural + symbolic consensus: {result.neural_result.top_threat_category} "
@@ -327,7 +385,7 @@ class ThinkSymOrchestrator:
             decision = "BLOCK"
             primary_reason = f"Multi-turn escalation attack detected (escalation score: {temporal_esc:.3f})"
             contributing.append(f"Temporal escalation: {temporal_esc:.3f}")
-        elif composite_score >= 0.70:
+        elif composite_score >= 0.60:
             decision = "BLOCK"
             primary_reason = f"Composite threat score {composite_score:.3f} exceeds block threshold."
             contributing.append(f"Composite score: {composite_score:.3f}")
@@ -346,10 +404,10 @@ class ThinkSymOrchestrator:
                 contributing.append(f"SmoothLLM fragility: {smooth_fragility:.3f}")
         elif result.neural_result and (
             (
-                neural_score >= 0.72 and
+                neural_score >= 0.60 and
                 result.neural_result.top_threat_category in {"prompt_injection", "jailbreak", "system_prompt_leak"}
             ) or (
-                neural_score >= 0.70 and
+                neural_score >= 0.60 and
                 result.neural_result.top_threat_category in {"harmful_content", "code_exploit", "pii_extraction"}
             )
         ):

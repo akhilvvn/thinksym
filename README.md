@@ -27,9 +27,14 @@ ThinkSym is a multi-layer adversarial prompt detection and policy enforcement sy
 
 Most LLM security solutions rely on a single layer — a neural classifier or a static blocklist — which can be bypassed by adversarial prompt engineering or causes excessive false positives for benign users. ThinkSym takes a different approach: a **five-layer neuro-symbolic pipeline** where each layer contributes a different kind of evidence, and a calibrated orchestrator fuses the signals into a final verdict.
 
-**Key outcomes (interim benchmark):**
-- ~95%+ adversarial block rate across 24-prompt adversarial test set
-- 0% false positive rate on 10-prompt benign test set
+**Current benchmark corpus:**
+- 1000 prompts total
+- 200 adversarial prompts across 10 threat categories
+- 800 benign prompts across diverse real-world assistant tasks
+
+**Observed interim snapshot (earlier small-set run):**
+- ~95%+ adversarial block rate
+- 0% benign false positive rate
 - Full per-layer observability and explainability for every decision
 
 ---

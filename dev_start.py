@@ -36,18 +36,21 @@ def start_backend(env_overrides: dict[str, str] | None = None) -> subprocess.Pop
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
+    use_reload = env.get("THINKSYM_BACKEND_RELOAD", "1") != "0"
+    backend_cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "backend.api.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        API_PORT,
+    ]
+    if use_reload:
+        backend_cmd.append("--reload")
     return subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "backend.api.main:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            API_PORT,
-            "--reload",
-        ],
+        backend_cmd,
         cwd=str(ROOT),
         env=env,
     )

@@ -29,6 +29,5 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.9.0
 
-# ─── Optional: Scallop neurosymbolic engine ─────────────────────────────────
-# Uncomment after checking compatibility with your Python/platform:
+# ─── Scallop neurosymbolic engine ─────────────────────────────────
 # scallopy>=0.2.1

@@ -30,4 +30,4 @@ uvicorn[standard]>=0.30.0
 pydantic>=2.9.0
 
 # ─── Scallop neurosymbolic engine ─────────────────────────────────
-# scallopy>=0.2.1
+scallopy>=0.2.1
